@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEPSE EMA Scanner</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>NEPSE EMA Scanner</h1>
+            <div class="controls">
+                <div class="ema-control">
+                    <button class="ema-btn" id="emaDown">−</button>
+                    <span class="ema-value" id="emaValue">90</span>
+                    <button class="ema-btn" id="emaUp">+</button>
+                </div>
+                <input type="date" id="dateInput" class="date-picker" value="2024-12-31" min="2022-01-01" max="2024-12-31">
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="stock-list" id="stockList">
+                <div class="empty-state">
+                    <p>No stocks selected</p>
+                    <p style="font-size: 14px;">Add stocks from the dropdown below</p>
+                </div>
+            </div>
+
+            <div class="add-stock">
+                <select class="stock-select" id="stockSelect">
+                    <option value="">Select a stock...</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="footer">
+            Last updated: <span id="lastUpdate"></span>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5"></script>
+    <script src="app.js"></script>
+</body>
+</html>
