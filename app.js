@@ -1,100 +1,87 @@
 // State
 let emaPeriod = 90;
-let selectedDate = '2024-12-31';
+let selectedDate = '';
 let selectedStocks = [];
 let allData = [];
 let availableSymbols = [];
+let availableDates = [];
 
 // DOM Elements
 const emaValue = document.getElementById('emaValue');
 const emaUp = document.getElementById('emaUp');
 const emaDown = document.getElementById('emaDown');
-const dateInput = document.getElementById('dateInput');
+const dateSelect = document.getElementById('dateSelect');
 const stockSelect = document.getElementById('stockSelect');
 const stockList = document.getElementById('stockList');
 const lastUpdate = document.getElementById('lastUpdate');
 
-// Get all CSV files from data folder
-async function getAllCSVFiles() {
-    const files = [];
-
-    // Generate all possible date filenames from 2022-01-01 to 2025-12-31
-    for (let year = 2022; year <= 2025; year++) {
-        for (let month = 1; month <= 12; month++) {
-            const daysInMonth = new Date(year, month, 0).getDate();
-            for (let day = 1; day <= daysInMonth; day++) {
-                const filename = `data/${String(month).padStart(2, '0')}_${String(day).padStart(2, '0')}_${year}.csv`;
-                files.push({
-                    filename,
-                    date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-                });
-            }
-        }
-    }
-
-    return files;
-}
-
-// Load CSV data from all files in data folder
+// Load data from batches
 async function loadData() {
-    const files = await getAllCSVFiles();
-    let filesLoaded = 0;
-    let filesFailed = 0;
+    console.log('Loading data batches...');
 
-    console.log(`Attempting to load ${files.length} CSV files...`);
+    const batches = window.DATA_BATCHES || [];
+    let loadedBatches = 0;
 
-    for (const {filename, date} of files) {
+    for (const batchNum of batches) {
         try {
-            const response = await fetch(filename);
-            if (!response.ok) {
-                filesFailed++;
-                continue;
-            }
-
-            const csvText = await response.text();
-
-            Papa.parse(csvText, {
-                header: true,
-                complete: function(results) {
-                    results.data.forEach(row => {
-                        if (row.Symbol && row.Close) {
-                            allData.push({
-                                symbol: row.Symbol,
-                                date: date,
-                                close: parseFloat(row.Close.replace(/,/g, ''))
-                            });
-                        }
-                    });
-                }
+            // Dynamically load batch script
+            await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = `data-batch-${batchNum}.js`;
+                script.onload = resolve;
+                script.onerror = reject;
+                document.body.appendChild(script);
             });
 
-            filesLoaded++;
+            // Get data from loaded batch
+            const batchData = window[`DATA_BATCH_${batchNum}`];
+            if (batchData) {
+                allData.push(...batchData);
+                loadedBatches++;
+            }
         } catch (error) {
-            filesFailed++;
+            console.error(`Error loading batch ${batchNum}:`, error);
         }
     }
 
-    console.log(`Loaded ${filesLoaded} files, ${filesFailed} failed`);
-    console.log(`Total ${allData.length} records`);
+    console.log(`Loaded ${loadedBatches} batches with ${allData.length} total records`);
 
-    // Get unique symbols
+    // Get unique symbols and dates
     const symbolSet = new Set(allData.map(row => row.symbol));
+    const dateSet = new Set(allData.map(row => row.date));
+
     availableSymbols = Array.from(symbolSet).sort();
+    availableDates = Array.from(dateSet).sort().reverse(); // Most recent first
 
-    // Populate dropdown
-    populateDropdown();
+    // Set default date to most recent
+    selectedDate = availableDates[0];
 
-    // Set last update date
-    if (allData.length > 0) {
-        const dates = allData.map(row => row.date).sort();
-        lastUpdate.textContent = dates[dates.length - 1];
-    }
+    // Populate dropdowns
+    populateDateDropdown();
+    populateStockDropdown();
 
-    console.log(`Ready with ${availableSymbols.length} symbols`);
+    // Set last update
+    lastUpdate.textContent = availableDates[0];
+
+    console.log(`Ready with ${availableSymbols.length} symbols and ${availableDates.length} dates`);
+}
+
+// Populate date dropdown
+function populateDateDropdown() {
+    dateSelect.innerHTML = '';
+    availableDates.forEach(date => {
+        const option = document.createElement('option');
+        option.value = date;
+        option.textContent = date;
+        if (date === selectedDate) {
+            option.selected = true;
+        }
+        dateSelect.appendChild(option);
+    });
 }
 
 // Populate stock dropdown
-function populateDropdown() {
+function populateStockDropdown() {
     stockSelect.innerHTML = '<option value="">Select a stock...</option>';
     availableSymbols.forEach(symbol => {
         if (!selectedStocks.includes(symbol)) {
@@ -131,7 +118,7 @@ function analyzeStock(symbol) {
         return null;
     }
 
-    const prices = stockData.map(row => parseFloat(row.close));
+    const prices = stockData.map(row => row.close);
     const currentPrice = prices[prices.length - 1];
 
     // Calculate EMA for different periods to get range
@@ -219,7 +206,7 @@ function renderStocks() {
 function addStock(symbol) {
     if (symbol && !selectedStocks.includes(symbol)) {
         selectedStocks.push(symbol);
-        populateDropdown();
+        populateStockDropdown();
         renderStocks();
     }
 }
@@ -227,7 +214,7 @@ function addStock(symbol) {
 // Remove stock
 function removeStock(symbol) {
     selectedStocks = selectedStocks.filter(s => s !== symbol);
-    populateDropdown();
+    populateStockDropdown();
     renderStocks();
 }
 
@@ -242,7 +229,7 @@ function updateEMA(delta) {
 emaUp.addEventListener('click', () => updateEMA(1));
 emaDown.addEventListener('click', () => updateEMA(-1));
 
-dateInput.addEventListener('change', (e) => {
+dateSelect.addEventListener('change', (e) => {
     selectedDate = e.target.value;
     renderStocks();
 });
