@@ -225,19 +225,22 @@ function updateEMA(delta) {
     renderStocks();
 }
 
-// Event Listeners
-emaUp.addEventListener('click', () => updateEMA(1));
-emaDown.addEventListener('click', () => updateEMA(-1));
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    // Event Listeners
+    emaUp.addEventListener('click', () => updateEMA(1));
+    emaDown.addEventListener('click', () => updateEMA(-1));
 
-dateSelect.addEventListener('change', (e) => {
-    selectedDate = e.target.value;
-    renderStocks();
+    dateSelect.addEventListener('change', (e) => {
+        selectedDate = e.target.value;
+        renderStocks();
+    });
+
+    stockSelect.addEventListener('change', (e) => {
+        addStock(e.target.value);
+        e.target.value = '';
+    });
+
+    // Load data
+    loadData();
 });
-
-stockSelect.addEventListener('change', (e) => {
-    addStock(e.target.value);
-    e.target.value = '';
-});
-
-// Initialize
-loadData();
