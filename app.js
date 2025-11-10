@@ -221,7 +221,13 @@ function removeStock(symbol) {
 // Update EMA
 function updateEMA(delta) {
     emaPeriod = Math.max(1, Math.min(200, emaPeriod + delta));
-    emaValue.textContent = emaPeriod;
+    emaValue.value = emaPeriod;
+    renderStocks();
+}
+
+function setEMA(value) {
+    emaPeriod = Math.max(1, Math.min(200, parseInt(value) || 90));
+    emaValue.value = emaPeriod;
     renderStocks();
 }
 
@@ -230,6 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Event Listeners
     emaUp.addEventListener('click', () => updateEMA(1));
     emaDown.addEventListener('click', () => updateEMA(-1));
+    emaValue.addEventListener('input', (e) => setEMA(e.target.value));
 
     dateSelect.addEventListener('change', (e) => {
         selectedDate = e.target.value;
