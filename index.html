@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEPSE EMA Scanner</title>
+    <style>
+        :root {
+            --bg-primary: #f5f5f5;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f9f9f9;
+            --bg-header: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --text-primary: #333;
+            --text-secondary: #666;
+            --text-tertiary: #999;
+            --border-color: #e0e0e0;
+            --accent-color: #667eea;
+            --success-color: #4caf50;
+            --danger-color: #f44336;
+            --warning-color: #ff9800;
+            --success-bg: #f1f8f4;
+            --danger-bg: #fef1f0;
+            --warning-bg: #fff8f0;
+            --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2d2d2d;
+            --bg-tertiary: #242424;
+            --text-primary: #e0e0e0;
+            --text-secondary: #b0b0b0;
+            --text-tertiary: #808080;
+            --border-color: #404040;
+            --success-bg: #1a2e1f;
+            --danger-bg: #2e1a1a;
+            --warning-bg: #2e2418;
+            --shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            padding: 20px;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            transition: background 0.3s;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 24px 30px;
+            background: var(--bg-header);
+            color: white;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.15);
+            padding: 6px 12px;
+            border-radius: 8px;
+        }
+
+        .ema-btn, .icon-btn {
+            width: 32px;
+            height: 32px;
+            background: rgba(255, 255, 255, 0.9);
+            color: #667eea;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .ema-btn:hover, .icon-btn:hover {
+            background: white;
+            transform: scale(1.05);
+        }
+
+        .ema-value {
+            min-width: 40px;
+            padding: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            color: white;
+            text-align: center;
+        }
+
+        .date-picker, select {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            background: rgba(255, 255, 255, 0.9);
+            cursor: pointer;
+        }
+
+        .date-picker:hover, select:hover {
+            background: white;
+        }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 30px;
+            border-bottom: 1px solid var(--border-color);
+            gap: 16px;
+            flex-wrap: wrap;
+            background: var(--bg-tertiary);
+            transition: background 0.3s;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 200px;
+            max-width: 400px;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 10px 40px 10px 14px;
+            border: 2px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 14px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            transition: all 0.2s;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .search-box::after {
+            content: '🔍';
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+        }
+
+        .toolbar-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 2px solid var(--border-color);
+        }
+
+        .btn:hover {
+            background: var(--accent-color);
+            color: white;
+            border-color: var(--accent-color);
+        }
+
+        .btn.active {
+            background: var(--accent-color);
+            color: white;
+            border-color: var(--accent-color);
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .stats-bar {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .stat-card {
+            flex: 1;
+            min-width: 150px;
+            padding: 16px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            border: 2px solid var(--border-color);
+            transition: all 0.2s;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            margin-top: 8px;
+        }
+
+        .stock-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .stock-table th {
+            background: var(--bg-tertiary);
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid var(--border-color);
+            cursor: pointer;
+            user-select: none;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            transition: background 0.2s;
+        }
+
+        .stock-table th:hover {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .stock-table th.sorted {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .stock-table th::after {
+            content: ' ⇅';
+            opacity: 0.3;
+        }
+
+        .stock-table th.sorted.asc::after {
+            content: ' ↑';
+            opacity: 1;
+        }
+
+        .stock-table th.sorted.desc::after {
+            content: ' ↓';
+            opacity: 1;
+        }
+
+        .stock-row {
+            border-bottom: 1px solid var(--border-color);
+            transition: all 0.3s;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .stock-row:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .stock-row.above {
+            background: var(--success-bg);
+        }
+
+        .stock-row.below {
+            background: var(--danger-bg);
+        }
+
+        .stock-row.within {
+            background: var(--warning-bg);
+        }
+
+        .stock-table td {
+            padding: 12px;
+        }
+
+        .stock-table.compact td {
+            padding: 8px;
+            font-size: 13px;
+        }
+
+        .symbol {
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .status-badge.above {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .status-badge.below {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        .status-badge.within {
+            background: var(--warning-color);
+            color: white;
+        }
+
+        .price {
+            font-weight: 600;
+            font-size: 18px;
+        }
+
+        .change-positive {
+            color: var(--success-color);
+        }
+
+        .change-negative {
+            color: var(--danger-color);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--danger-color), var(--warning-color), var(--success-color));
+            transition: width 0.3s;
+        }
+
+        .sparkline {
+            width: 100px;
+            height: 30px;
+        }
+
+        .volume-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .volume-high {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .volume-low {
+            background: var(--text-tertiary);
+            color: white;
+        }
+
+        .add-stock {
+            margin-top: 20px;
+            padding: 20px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+        }
+
+        .stock-select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 15px;
+            cursor: pointer;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        .footer {
+            padding: 16px 30px;
+            border-top: 1px solid var(--border-color);
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            font-size: 13px;
+            text-align: center;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+        }
+
+        .spinner {
+            border: 4px solid var(--border-color);
+            border-top: 4px solid var(--accent-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-tertiary);
+        }
+
+        .empty-state p {
+            margin: 8px 0;
+            font-size: 16px;
+        }
+
+        .kbd {
+            display: inline-block;
+            padding: 2px 6px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .alert-indicator {
+            position: relative;
+        }
+
+        .alert-indicator::after {
+            content: '🔔';
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            font-size: 12px;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .search-box {
+                max-width: 100%;
+            }
+
+            .stock-table {
+                font-size: 12px;
+            }
+
+            .stats-bar {
+                flex-direction: column;
+            }
+        }
+
+        .tooltip {
+            position: relative;
+            display: inline-block;
+        }
+
+        .tooltip .tooltiptext {
+            visibility: hidden;
+            background-color: #333;
+            color: white;
+            text-align: center;
+            padding: 8px 12px;
+            border-radius: 6px;
+            position: absolute;
+            z-index: 100;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .tooltip:hover .tooltiptext {
+            visibility: visible;
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📈 NEPSE EMA Scanner</h1>
+            <div class="controls">
+                <div class="control-group">
+                    <button class="ema-btn" onclick="adjustEma(-1)">−</button>
+                    <span class="ema-value" id="emaPeriod">90</span>
+                    <button class="ema-btn" onclick="adjustEma(1)">+</button>
+                </div>
+                <input type="date" class="date-picker" id="datePicker" value="2024-12-31" min="2022-01-01" max="2024-12-31">
+                <button class="icon-btn tooltip" onclick="toggleDarkMode()" title="Toggle dark mode">
+                    <span id="themeIcon">🌙</span>
+                    <span class="tooltiptext">Toggle Dark Mode (D)</span>
+                </button>
+                <button class="icon-btn tooltip" onclick="toggleMultiEma()">
+                    <span>📊</span>
+                    <span class="tooltiptext">Multiple EMAs (M)</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <div class="search-box">
+                <input type="text" id="searchBox" placeholder="Search stocks..." oninput="filterStocks()">
+            </div>
+            <div class="toolbar-actions">
+                <button class="btn" id="compactBtn" onclick="toggleCompactMode()">
+                    Compact
+                </button>
+                <button class="btn" onclick="exportToCSV()">
+                    📥 Export CSV
+                </button>
+                <button class="btn" onclick="showAlertManager()">
+                    🔔 Alerts
+                </button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="stats-bar">
+                <div class="stat-card">
+                    <div class="stat-label">Total Stocks</div>
+                    <div class="stat-value" id="statTotal">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Above EMA</div>
+                    <div class="stat-value change-positive" id="statAbove">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Below EMA</div>
+                    <div class="stat-value change-negative" id="statBelow">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Within Range</div>
+                    <div class="stat-value" id="statWithin">0</div>
+                </div>
+            </div>
+
+            <div id="loading" class="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>Loading stock data...</p>
+            </div>
+
+            <div id="emptyState" class="empty-state">
+                <p>No stocks selected</p>
+                <p style="font-size: 14px;">Add stocks from the dropdown below</p>
+                <p style="margin-top: 16px; font-size: 13px;">
+                    <span class="kbd">↑</span> <span class="kbd">↓</span> Adjust EMA &nbsp;|&nbsp;
+                    <span class="kbd">D</span> Dark Mode &nbsp;|&nbsp;
+                    <span class="kbd">C</span> Compact &nbsp;|&nbsp;
+                    <span class="kbd">M</span> Multi-EMA
+                </p>
+            </div>
+
+            <table class="stock-table" id="stockTable" style="display: none;">
+                <thead>
+                    <tr>
+                        <th onclick="sortTable('symbol')">Symbol</th>
+                        <th onclick="sortTable('status')">Status</th>
+                        <th onclick="sortTable('price')">Price</th>
+                        <th onclick="sortTable('change')">Change</th>
+                        <th onclick="sortTable('deviation')">Deviation</th>
+                        <th>Position</th>
+                        <th onclick="sortTable('ema')">EMA Range</th>
+                        <th>Trend</th>
+                        <th onclick="sortTable('days')">Days</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="stockTableBody">
+                </tbody>
+            </table>
+
+            <div class="add-stock">
+                <select class="stock-select" id="stockSelector" onchange="addStock(this.value)">
+                    <option value="">Select a stock to add...</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div>Last updated: <span id="lastUpdate">-</span></div>
+            <div>
+                <kbd class="kbd">Enter</kbd> Add Stock &nbsp;
+                <kbd class="kbd">Esc</kbd> Clear Search
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State management
+        let state = {
+            emaPeriod: 90,
+            selectedDate: '2024-12-31',
+            selectedStocks: ['NABIL', 'ADBL', 'UPPER', 'NICA'],
+            allData: new Map(),
+            allSymbols: [],
+            analysisResults: [],
+            sortColumn: null,
+            sortDirection: 'asc',
+            compactMode: false,
+            darkMode: false,
+            multiEmaMode: false,
+            searchQuery: '',
+            alerts: JSON.parse(localStorage.getItem('nepse_alerts') || '{}')
+        };
+
+        // EMA Calculation
+        function calculateEMA(values, period) {
+            if (values.length < period) return [];
+
+            const multiplier = 2 / (period + 1);
+            const ema = new Array(values.length);
+
+            // First EMA is SMA
+            let sum = 0;
+            for (let i = 0; i < period; i++) {
+                sum += values[i];
+            }
+            ema[period - 1] = sum / period;
+
+            // Calculate subsequent EMAs
+            for (let i = period; i < values.length; i++) {
+                ema[i] = (values[i] - ema[i - 1]) * multiplier + ema[i - 1];
+            }
+
+            return ema;
+        }
+
+        // Parse CSV data
+        function parseCSV(text) {
+            const lines = text.trim().split('\n');
+            const headers = lines[0].split(',');
+            const data = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                const values = lines[i].split(',');
+                if (values.length >= 6) {
+                    const cleanNum = (str) => parseFloat(str.replace(/,/g, '')) || 0;
+                    data.push({
+                        symbol: values[0],
+                        open: cleanNum(values[2]),
+                        high: cleanNum(values[3]),
+                        low: cleanNum(values[4]),
+                        close: cleanNum(values[5]),
+                        volume: cleanNum(values[7]),
+                        prevClose: cleanNum(values[8])
+                    });
+                }
+            }
+            return data;
+        }
+
+        // Load CSV files
+        async function loadData() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('emptyState').style.display = 'none';
+
+            try {
+                // Load a sample of recent dates (last 90 days for performance)
+                const dates = [];
+                const endDate = new Date(state.selectedDate);
+                for (let i = 0; i < 90; i++) {
+                    const d = new Date(endDate);
+                    d.setDate(d.getDate() - i);
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    const year = d.getFullYear();
+                    dates.push(`${month}_${day}_${year}`);
+                }
+
+                for (const date of dates) {
+                    try {
+                        const response = await fetch(`data/${date}.csv`);
+                        if (response.ok) {
+                            const text = await response.text();
+                            const stocks = parseCSV(text);
+                            const [month, day, year] = date.split('_');
+                            const dateObj = new Date(`${year}-${month}-${day}`);
+
+                            stocks.forEach(stock => {
+                                if (!state.allData.has(stock.symbol)) {
+                                    state.allData.set(stock.symbol, []);
+                                }
+                                state.allData.get(stock.symbol).push({
+                                    ...stock,
+                                    date: dateObj
+                                });
+                            });
+                        }
+                    } catch (e) {
+                        // Skip missing dates
+                    }
+                }
+
+                // Get unique symbols
+                state.allSymbols = Array.from(state.allData.keys()).sort();
+
+                // Sort each stock's data by date
+                state.allData.forEach(data => {
+                    data.sort((a, b) => a.date - b.date);
+                });
+
+                populateStockSelector();
+                await updateAnalysis();
+
+            } catch (error) {
+                console.error('Error loading data:', error);
+                alert('Error loading stock data. Please check that CSV files exist in the data/ folder.');
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+
+        // Analyze a single stock
+        function analyzeStock(symbol, period) {
+            const stockData = state.allData.get(symbol);
+            if (!stockData || stockData.length < period) return null;
+
+            // Filter by date
+            const targetDate = new Date(state.selectedDate);
+            const filteredData = stockData.filter(d => d.date <= targetDate);
+            if (filteredData.length < period) return null;
+
+            // Calculate EMAs
+            const highs = filteredData.map(d => d.high);
+            const lows = filteredData.map(d => d.low);
+            const closes = filteredData.map(d => d.close);
+
+            const emaHigh = calculateEMA(highs, period);
+            const emaLow = calculateEMA(lows, period);
+
+            if (emaHigh.length === 0) return null;
+
+            const latest = filteredData[filteredData.length - 1];
+            const latestEmaHigh = emaHigh[emaHigh.length - 1];
+            const latestEmaLow = emaLow[emaLow.length - 1];
+
+            // Determine status
+            let status;
+            if (latest.close > latestEmaHigh) {
+                status = 'above';
+            } else if (latest.close < latestEmaLow) {
+                status = 'below';
+            } else {
+                status = 'within';
+            }
+
+            // Calculate percentage deviation
+            const emaMid = (latestEmaHigh + latestEmaLow) / 2;
+            const deviation = ((latest.close - emaMid) / emaMid) * 100;
+
+            // Calculate position in range (0-100%)
+            const rangePosition = ((latest.close - latestEmaLow) / (latestEmaHigh - latestEmaLow)) * 100;
+
+            // Daily change
+            const dailyChange = latest.prevClose ? ((latest.close - latest.prevClose) / latest.prevClose) * 100 : 0;
+
+            // Calculate days in current status
+            let daysInStatus = 1;
+            for (let i = filteredData.length - 2; i >= 0 && i >= filteredData.length - 30; i--) {
+                const d = filteredData[i];
+                const emaH = emaHigh[i];
+                const emaL = emaLow[i];
+                let prevStatus;
+                if (d.close > emaH) prevStatus = 'above';
+                else if (d.close < emaL) prevStatus = 'below';
+                else prevStatus = 'within';
+
+                if (prevStatus === status) daysInStatus++;
+                else break;
+            }
+
+            // Get sparkline data (last 30 days)
+            const sparklineData = closes.slice(-30);
+
+            // Multi-EMA calculations
+            let ema50 = null, ema200 = null;
+            if (state.multiEmaMode) {
+                const ema50High = calculateEMA(highs, 50);
+                const ema50Low = calculateEMA(lows, 50);
+                const ema200High = calculateEMA(highs, 200);
+                const ema200Low = calculateEMA(lows, 200);
+
+                if (ema50High.length > 0) {
+                    ema50 = {
+                        high: ema50High[ema50High.length - 1],
+                        low: ema50Low[ema50Low.length - 1]
+                    };
+                }
+                if (ema200High.length > 0) {
+                    ema200 = {
+                        high: ema200High[ema200High.length - 1],
+                        low: ema200Low[ema200Low.length - 1]
+                    };
+                }
+            }
+
+            return {
+                symbol,
+                price: latest.close,
+                prevClose: latest.prevClose,
+                dailyChange,
+                emaHigh: latestEmaHigh,
+                emaLow: latestEmaLow,
+                status,
+                deviation,
+                rangePosition: Math.max(0, Math.min(100, rangePosition)),
+                daysInStatus,
+                sparklineData,
+                volume: latest.volume,
+                lastUpdate: latest.date.toISOString().split('T')[0],
+                ema50,
+                ema200
+            };
+        }
+
+        // Update analysis
+        async function updateAnalysis() {
+            state.analysisResults = [];
+
+            for (const symbol of state.selectedStocks) {
+                const result = analyzeStock(symbol, state.emaPeriod);
+                if (result) {
+                    state.analysisResults.push(result);
+                    checkAlerts(result);
+                }
+            }
+
+            renderTable();
+            updateStats();
+        }
+
+        // Render stock table
+        function renderTable() {
+            const tbody = document.getElementById('stockTableBody');
+            const table = document.getElementById('stockTable');
+            const emptyState = document.getElementById('emptyState');
+
+            if (state.analysisResults.length === 0) {
+                table.style.display = 'none';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            table.style.display = 'table';
+            emptyState.style.display = 'none';
+
+            // Apply search filter
+            let results = state.analysisResults.filter(r =>
+                r.symbol.toLowerCase().includes(state.searchQuery.toLowerCase())
+            );
+
+            // Apply sorting
+            if (state.sortColumn) {
+                results.sort((a, b) => {
+                    let aVal, bVal;
+                    switch(state.sortColumn) {
+                        case 'symbol': aVal = a.symbol; bVal = b.symbol; break;
+                        case 'status': aVal = a.status; bVal = b.status; break;
+                        case 'price': aVal = a.price; bVal = b.price; break;
+                        case 'change': aVal = a.dailyChange; bVal = b.dailyChange; break;
+                        case 'deviation': aVal = a.deviation; bVal = b.deviation; break;
+                        case 'ema': aVal = a.emaLow; bVal = b.emaLow; break;
+                        case 'days': aVal = a.daysInStatus; bVal = b.daysInStatus; break;
+                        default: return 0;
+                    }
+
+                    if (typeof aVal === 'string') {
+                        return state.sortDirection === 'asc'
+                            ? aVal.localeCompare(bVal)
+                            : bVal.localeCompare(aVal);
+                    } else {
+                        return state.sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+                    }
+                });
+            }
+
+            tbody.innerHTML = results.map(r => `
+                <tr class="stock-row ${r.status}">
+                    <td>
+                        <div class="symbol ${state.alerts[r.symbol] ? 'alert-indicator' : ''}">${r.symbol}</div>
+                    </td>
+                    <td>
+                        <span class="status-badge ${r.status}">
+                            ${r.status === 'above' ? '↑' : r.status === 'below' ? '↓' : '→'}
+                            ${r.status}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="price">₨${r.price.toFixed(2)}</div>
+                        ${r.prevClose ? `<div style="font-size: 12px; color: var(--text-secondary);">Prev: ${r.prevClose.toFixed(2)}</div>` : ''}
+                    </td>
+                    <td>
+                        <span class="${r.dailyChange >= 0 ? 'change-positive' : 'change-negative'}">
+                            ${r.dailyChange >= 0 ? '+' : ''}${r.dailyChange.toFixed(2)}%
+                        </span>
+                    </td>
+                    <td>
+                        <span class="${r.deviation >= 0 ? 'change-positive' : 'change-negative'}">
+                            ${r.deviation >= 0 ? '+' : ''}${r.deviation.toFixed(2)}%
+                        </span>
+                    </td>
+                    <td>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${r.rangePosition}%"></div>
+                        </div>
+                        <div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">
+                            ${r.rangePosition.toFixed(0)}%
+                        </div>
+                    </td>
+                    <td>
+                        <div>EMA ${state.emaPeriod}: ${r.emaLow.toFixed(2)} - ${r.emaHigh.toFixed(2)}</div>
+                        ${state.multiEmaMode && r.ema50 ? `<div style="font-size: 11px; color: var(--text-secondary);">50: ${r.ema50.low.toFixed(2)}-${r.ema50.high.toFixed(2)}</div>` : ''}
+                        ${state.multiEmaMode && r.ema200 ? `<div style="font-size: 11px; color: var(--text-secondary);">200: ${r.ema200.low.toFixed(2)}-${r.ema200.high.toFixed(2)}</div>` : ''}
+                    </td>
+                    <td>
+                        <canvas class="sparkline" width="100" height="30" data-values="${r.sparklineData.join(',')}"></canvas>
+                    </td>
+                    <td>
+                        <div>${r.daysInStatus} day${r.daysInStatus !== 1 ? 's' : ''}</div>
+                        <span class="volume-badge ${r.volume > 10000 ? 'volume-high' : 'volume-low'}">
+                            ${r.volume > 1000000 ? (r.volume/1000000).toFixed(1) + 'M' :
+                              r.volume > 1000 ? (r.volume/1000).toFixed(1) + 'K' : r.volume}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="btn" onclick="removeStock('${r.symbol}')" style="padding: 4px 8px; font-size: 12px;">✕</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            // Draw sparklines
+            drawAllSparklines();
+
+            // Update last update time
+            if (results.length > 0) {
+                document.getElementById('lastUpdate').textContent = results[0].lastUpdate;
+            }
+        }
+
+        // Draw sparklines
+        function drawAllSparklines() {
+            document.querySelectorAll('.sparkline').forEach(canvas => {
+                const values = canvas.dataset.values.split(',').map(Number);
+                drawSparkline(canvas, values);
+            });
+        }
+
+        function drawSparkline(canvas, values) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+
+            ctx.clearRect(0, 0, width, height);
+
+            if (values.length < 2) return;
+
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            const range = max - min || 1;
+
+            ctx.strokeStyle = state.darkMode ? '#667eea' : '#667eea';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+
+            values.forEach((value, i) => {
+                const x = (i / (values.length - 1)) * width;
+                const y = height - ((value - min) / range) * height;
+
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+
+            ctx.stroke();
+        }
+
+        // Update statistics
+        function updateStats() {
+            const total = state.analysisResults.length;
+            const above = state.analysisResults.filter(r => r.status === 'above').length;
+            const below = state.analysisResults.filter(r => r.status === 'below').length;
+            const within = state.analysisResults.filter(r => r.status === 'within').length;
+
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statAbove').textContent = above;
+            document.getElementById('statBelow').textContent = below;
+            document.getElementById('statWithin').textContent = within;
+        }
+
+        // Populate stock selector
+        function populateStockSelector() {
+            const selector = document.getElementById('stockSelector');
+            selector.innerHTML = '<option value="">Select a stock to add...</option>' +
+                state.allSymbols
+                    .filter(s => !state.selectedStocks.includes(s))
+                    .map(s => `<option value="${s}">${s}</option>`)
+                    .join('');
+        }
+
+        // Add stock
+        function addStock(symbol) {
+            if (symbol && !state.selectedStocks.includes(symbol)) {
+                state.selectedStocks.push(symbol);
+                updateAnalysis();
+                populateStockSelector();
+            }
+            document.getElementById('stockSelector').value = '';
+        }
+
+        // Remove stock
+        function removeStock(symbol) {
+            state.selectedStocks = state.selectedStocks.filter(s => s !== symbol);
+            updateAnalysis();
+            populateStockSelector();
+        }
+
+        // Adjust EMA period
+        function adjustEma(delta) {
+            state.emaPeriod = Math.max(1, Math.min(200, state.emaPeriod + delta));
+            document.getElementById('emaPeriod').textContent = state.emaPeriod;
+            updateAnalysis();
+        }
+
+        // Sort table
+        function sortTable(column) {
+            if (state.sortColumn === column) {
+                state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                state.sortColumn = column;
+                state.sortDirection = 'asc';
+            }
+
+            // Update header styles
+            document.querySelectorAll('.stock-table th').forEach(th => {
+                th.classList.remove('sorted', 'asc', 'desc');
+            });
+            const th = event.target;
+            th.classList.add('sorted', state.sortDirection);
+
+            renderTable();
+        }
+
+        // Filter stocks
+        function filterStocks() {
+            state.searchQuery = document.getElementById('searchBox').value;
+            renderTable();
+        }
+
+        // Toggle compact mode
+        function toggleCompactMode() {
+            state.compactMode = !state.compactMode;
+            const table = document.getElementById('stockTable');
+            const btn = document.getElementById('compactBtn');
+
+            if (state.compactMode) {
+                table.classList.add('compact');
+                btn.classList.add('active');
+            } else {
+                table.classList.remove('compact');
+                btn.classList.remove('active');
+            }
+        }
+
+        // Toggle dark mode
+        function toggleDarkMode() {
+            state.darkMode = !state.darkMode;
+            document.documentElement.setAttribute('data-theme', state.darkMode ? 'dark' : 'light');
+            document.getElementById('themeIcon').textContent = state.darkMode ? '☀️' : '🌙';
+            localStorage.setItem('nepse_theme', state.darkMode ? 'dark' : 'light');
+
+            // Redraw sparklines with new colors
+            drawAllSparklines();
+        }
+
+        // Toggle multi-EMA mode
+        function toggleMultiEma() {
+            state.multiEmaMode = !state.multiEmaMode;
+            updateAnalysis();
+        }
+
+        // Export to CSV
+        function exportToCSV() {
+            const headers = ['Symbol', 'Status', 'Price', 'Change%', 'Deviation%', 'EMA Low', 'EMA High', 'Days', 'Volume'];
+            const rows = state.analysisResults.map(r => [
+                r.symbol,
+                r.status,
+                r.price.toFixed(2),
+                r.dailyChange.toFixed(2),
+                r.deviation.toFixed(2),
+                r.emaLow.toFixed(2),
+                r.emaHigh.toFixed(2),
+                r.daysInStatus,
+                r.volume
+            ]);
+
+            const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `nepse_ema_analysis_${state.selectedDate}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // Alert management
+        function showAlertManager() {
+            const symbol = prompt('Enter stock symbol for alert:');
+            if (!symbol) return;
+
+            const threshold = prompt(`Set alert when ${symbol} crosses EMA (above/below/within):`);
+            if (threshold) {
+                state.alerts[symbol] = threshold;
+                localStorage.setItem('nepse_alerts', JSON.stringify(state.alerts));
+                renderTable();
+                alert(`Alert set for ${symbol}`);
+            }
+        }
+
+        function checkAlerts(result) {
+            const alert = state.alerts[result.symbol];
+            if (alert && alert === result.status) {
+                // In a real app, you'd show a notification
+                console.log(`Alert: ${result.symbol} is ${result.status} EMA!`);
+            }
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Ignore if typing in input
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
+                if (e.key === 'Escape') {
+                    e.target.blur();
+                    document.getElementById('searchBox').value = '';
+                    filterStocks();
+                }
+                return;
+            }
+
+            switch(e.key.toLowerCase()) {
+                case 'arrowup':
+                    e.preventDefault();
+                    adjustEma(1);
+                    break;
+                case 'arrowdown':
+                    e.preventDefault();
+                    adjustEma(-1);
+                    break;
+                case 'd':
+                    toggleDarkMode();
+                    break;
+                case 'c':
+                    toggleCompactMode();
+                    break;
+                case 'm':
+                    toggleMultiEma();
+                    break;
+                case '/':
+                    e.preventDefault();
+                    document.getElementById('searchBox').focus();
+                    break;
+            }
+        });
+
+        // Date picker change
+        document.getElementById('datePicker').addEventListener('change', (e) => {
+            state.selectedDate = e.target.value;
+            updateAnalysis();
+        });
+
+        // Initialize
+        window.addEventListener('DOMContentLoaded', () => {
+            // Load saved theme
+            const savedTheme = localStorage.getItem('nepse_theme');
+            if (savedTheme === 'dark') {
+                toggleDarkMode();
+            }
+
+            // Load data
+            loadData();
+        });
+    </script>
+</body>
+</html>
