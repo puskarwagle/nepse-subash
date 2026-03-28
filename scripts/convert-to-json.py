@@ -1,51 +1,60 @@
 #!/usr/bin/env python3
-import csv
 import json
-import glob
 import os
+import sqlite3
+import sys
 
-# Get all CSV files
-csv_files = sorted(glob.glob('data/*.csv'))
+# Add src to python path to import db
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from src.db.database import get_db_connection, init_db
 
-# Group files in batches of 10
+init_db()
+conn = get_db_connection()
+cursor = conn.cursor()
+
+# Get all unique dates in the DB ordered
+cursor.execute("SELECT DISTINCT date FROM daily_prices ORDER BY date ASC")
+dates = [row['date'] for row in cursor.fetchall()]
+
+# We'll group dates in batches of 10 to mimic the old behavior (which grouped files by 10)
 batch_size = 10
 all_batches = []
 
-for i in range(0, len(csv_files), batch_size):
-    batch = csv_files[i:i+batch_size]
+# Map list of dates to their index so we can fetch records and group them easily
+for i in range(0, len(dates), batch_size):
+    batch_dates = dates[i:i+batch_size]
     batch_num = i // batch_size
-
+    
+    if not batch_dates:
+        break
+        
+    placeholders = ','.join(['?'] * len(batch_dates))
+    query = f"""
+        SELECT symbol, date, close 
+        FROM daily_prices 
+        WHERE date IN ({placeholders})
+        ORDER BY date ASC
+    """
+    
+    cursor.execute(query, batch_dates)
+    rows = cursor.fetchall()
+    
     batch_data = []
-
-    for csv_file in batch:
-        # Extract date from filename (MM_DD_YYYY.csv)
-        filename = os.path.basename(csv_file)
-        parts = filename.replace('.csv', '').split('_')
-        date_str = f'{parts[2]}-{parts[0].zfill(2)}-{parts[1].zfill(2)}'
-
-        # Read CSV
-        with open(csv_file, 'r') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                symbol = row.get('Symbol', '')
-                close = row.get('Close', '').replace(',', '')
-                if symbol and close:
-                    try:
-                        batch_data.append({
-                            'symbol': symbol,
-                            'date': date_str,
-                            'close': float(close)
-                        })
-                    except:
-                        pass
-
+    for row in rows:
+        batch_data.append({
+            'symbol': row['symbol'],
+            'date': row['date'],
+            'close': float(row['close']) if row['close'] else 0.0
+        })
+        
     # Write batch to JS file
     js_content = f'window.DATA_BATCH_{batch_num} = {json.dumps(batch_data)};'
 
+    os.makedirs('src/web-static', exist_ok=True)
     with open(f'src/web-static/data-batch-{batch_num}.js', 'w') as f:
         f.write(js_content)
 
-    print(f'Created batch {batch_num} with {len(batch_data)} records from {len(batch)} files')
+    print(f'Created batch {batch_num} with {len(batch_data)} records from {len(batch_dates)} dates')
     all_batches.append(batch_num)
 
 # Create index file
@@ -54,4 +63,6 @@ with open('src/web-static/data-index.js', 'w') as f:
     f.write(index_content)
 
 print(f'Created {len(all_batches)} batches total')
-print(f'Total CSV files processed: {len(csv_files)}')
+print(f'Total dates processed: {len(dates)}')
+
+conn.close()

@@ -1,10 +1,13 @@
+import os
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
-import glob
+import sqlite3
 from typing import List, Optional
 from datetime import datetime
+
+from src.db.database import get_db_connection
 
 app = FastAPI()
 
@@ -17,55 +20,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
 class StockRequest(BaseModel):
     symbols: List[str]
     ema_period: int = 90
     date: Optional[str] = None  # Format: YYYY-MM-DD
 
-
-def clean_numeric(value):
-    """Remove commas from numeric strings"""
-    if isinstance(value, str):
-        return value.replace(',', '')
-    return value
-
-
-def load_all_data():
-    """Load all CSV files and combine into single DataFrame"""
-    all_files = sorted(glob.glob('../../data/*.csv'))
-
-    dfs = []
-    for file in all_files:
-        # Extract date from filename (MM_DD_YYYY.csv)
-        date_str = file.split('/')[-1].replace('.csv', '')
-        date_parts = date_str.split('_')
-        date = f"{date_parts[2]}-{date_parts[0]}-{date_parts[1]}"
-
-        df = pd.read_csv(file)
-        df['Date'] = date
-        dfs.append(df)
-
-    combined = pd.concat(dfs, ignore_index=True)
-
-    # Clean numeric columns
-    for col in ['Open', 'High', 'Low', 'Close']:
-        combined[col] = pd.to_numeric(combined[col].apply(clean_numeric), errors='coerce')
-
-    combined['Date'] = pd.to_datetime(combined['Date'])
-    combined = combined.sort_values(['Symbol', 'Date'])
-
-    return combined
-
-
 def calculate_ema(series, period):
     """Calculate Exponential Moving Average"""
     return series.ewm(span=period, adjust=False).mean()
 
-
 def analyze_stock(symbol: str, period: int, df: pd.DataFrame, target_date: Optional[str] = None):
     """Analyze single stock against EMA range"""
-    stock_data = df[df['Symbol'] == symbol].copy()
+    stock_data = df[df['symbol'] == symbol].copy()
 
     if stock_data.empty:
         return None
@@ -73,21 +39,25 @@ def analyze_stock(symbol: str, period: int, df: pd.DataFrame, target_date: Optio
     # Filter data up to target date if specified
     if target_date:
         target_dt = pd.to_datetime(target_date)
-        stock_data = stock_data[stock_data['Date'] <= target_dt]
+        stock_data = stock_data[stock_data['date'] <= target_dt]
 
         if stock_data.empty:
             return None
 
+    # Ensure date is datetime and sorted
+    stock_data['date'] = pd.to_datetime(stock_data['date'])
+    stock_data = stock_data.sort_values('date')
+
     # Calculate EMA on High and Low
-    stock_data['EMA_High'] = calculate_ema(stock_data['High'], period)
-    stock_data['EMA_Low'] = calculate_ema(stock_data['Low'], period)
+    stock_data['EMA_High'] = calculate_ema(stock_data['high'], period)
+    stock_data['EMA_Low'] = calculate_ema(stock_data['low'], period)
 
     # Get latest values (up to target date)
     latest = stock_data.iloc[-1]
-    current_price = latest['Close']
+    current_price = latest['close']
     ema_high = latest['EMA_High']
     ema_low = latest['EMA_Low']
-    last_date = latest['Date']
+    last_date = latest['date']
 
     # Determine status
     if current_price > ema_high:
@@ -106,32 +76,54 @@ def analyze_stock(symbol: str, period: int, df: pd.DataFrame, target_date: Optio
         "last_updated": last_date.strftime('%Y-%m-%d')
     }
 
-
-# Load data once at startup
-print("Loading historical data...")
-historical_data = load_all_data()
-print(f"Loaded {len(historical_data)} records")
-
-
 @app.get("/")
 def root():
     return {"message": "NEPSE EMA Scanner API"}
 
-
 @app.get("/symbols")
 def get_available_symbols():
     """Get list of all available stock symbols"""
-    symbols = sorted(historical_data['Symbol'].unique().tolist())
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT DISTINCT symbol FROM daily_prices ORDER BY symbol")
+    symbols = [row['symbol'] for row in cursor.fetchall()]
+    conn.close()
     return {"symbols": symbols}
-
 
 @app.post("/analyze")
 def analyze_stocks(request: StockRequest):
     """Analyze selected stocks against EMA range"""
     results = []
 
+    if not request.symbols:
+        return {"results": [], "ema_period": request.ema_period, "date": request.date}
+
+    conn = get_db_connection()
+    
+    # Query data for the requested symbols
+    symbols_placeholder = ','.join(['?'] * len(request.symbols))
+    query = f"SELECT symbol, date, high, low, close FROM daily_prices WHERE symbol IN ({symbols_placeholder})"
+    params = tuple(request.symbols)
+    
+    # Optional date filter at query level
+    if request.date:
+        query += " AND date <= ?"
+        params += (request.date,)
+        
+    query += " ORDER BY symbol, date"
+    
+    df = pd.read_sql_query(query, conn, params=params)
+    conn.close()
+
+    if df.empty:
+        return {
+            "results": [{"symbol": sym, "error": "No data found"} for sym in request.symbols],
+            "ema_period": request.ema_period,
+            "date": request.date
+        }
+
     for symbol in request.symbols:
-        analysis = analyze_stock(symbol, request.ema_period, historical_data, request.date)
+        analysis = analyze_stock(symbol, request.ema_period, df, request.date)
         if analysis:
             results.append(analysis)
         else:
@@ -145,7 +137,6 @@ def analyze_stocks(request: StockRequest):
         "ema_period": request.ema_period,
         "date": request.date
     }
-
 
 if __name__ == "__main__":
     import uvicorn

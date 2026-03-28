@@ -33,7 +33,8 @@ case "$1" in
         cd src/web-svelte && npm install
         ;;
     backend)
-        cd src/backend && uvicorn backend:app --reload
+        export PYTHONPATH=$PYTHONPATH:.
+        uvicorn src.backend.backend:app --reload
         ;;
     frontend)
         cd src/web-svelte && npm run dev
@@ -52,8 +53,9 @@ case "$1" in
         # Trap Ctrl+C
         trap cleanup SIGINT SIGTERM
 
-        # Start backend in background
-        (cd src/backend && uvicorn backend:app --port 8000) &
+        # Start backend in background from root with PYTHONPATH set
+        export PYTHONPATH=$PYTHONPATH:.
+        uvicorn src.backend.backend:app --port 8000 &
         BACKEND_PID=$!
         
         # Start frontend in background

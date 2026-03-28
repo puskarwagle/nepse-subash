@@ -16,6 +16,8 @@ dist/
 
 # Project Specific
 data/*.csv
+*.db
+*.sqlite
 data.csv
 src/web-static/data-batch-*.js
 src/web-static/data-index.js

@@ -76,6 +76,57 @@ def clean_df(df):
 
 
 import os
+import sys
+
+# Add src to python path to import db
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from src.db.database import get_db_connection, init_db
+
+def save_to_db(df, date_str):
+    # Convert MM/DD/YYYY to YYYY-MM-DD
+    date_parts = date_str.split('/')
+    if len(date_parts) == 3:
+        iso_date = f"{date_parts[2]}-{date_parts[0]}-{date_parts[1]}"
+    else:
+        iso_date = date_str
+        
+    init_db()
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    def clean_numeric(value):
+        if isinstance(value, str):
+            return value.replace(',', '')
+        return value
+        
+    # Clean numeric columns
+    for col in ['Open', 'High', 'Low', 'Close']:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col].apply(clean_numeric), errors='coerce')
+            
+    for _, row in df.iterrows():
+        symbol = row.get('Symbol')
+        open_val = row.get('Open', 0.0)
+        high_val = row.get('High', 0.0)
+        low_val = row.get('Low', 0.0)
+        close_val = row.get('Close', 0.0)
+        volume_val = row.get('Vol', 0.0) if 'Vol' in df.columns else row.get('Volume', 0.0)
+        if pd.isna(volume_val):
+            volume_val = 0.0
+        if isinstance(volume_val, str):
+            volume_val = float(clean_numeric(volume_val)) if clean_numeric(volume_val) else 0.0
+
+        if pd.isna(symbol):
+            continue
+            
+        cursor.execute("""
+            INSERT OR REPLACE INTO daily_prices (symbol, date, open, high, low, close, volume)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (symbol, iso_date, open_val, high_val, low_val, close_val, volume_val))
+        
+    conn.commit()
+    conn.close()
+    print(f"Saved {len(df)} records for {iso_date} to database.")
 
 def main():
     options = Options()
@@ -97,8 +148,7 @@ def main():
     search(driver, date)
     df = scrape_data(driver, date)
     final_df = clean_df(df)
-    file_name = date.replace("/", "_")
-    final_df.to_csv(f"data/{file_name}.csv", index=False) # Save to CSV file
+    save_to_db(final_df, date) # Save to SQLite database
 
 
 if __name__ == "__main__":
