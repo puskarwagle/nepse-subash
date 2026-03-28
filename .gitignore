@@ -1,1 +1,32 @@
-.venvsimple-app/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+.env
+
+# Node.js
+node_modules/
+.svelte-kit/
+build/
+dist/
+.env.local
+
+# Project Specific
+data/*.csv
+data.csv
+src/web-static/data-batch-*.js
+src/web-static/data-index.js
+run.sh.out
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
