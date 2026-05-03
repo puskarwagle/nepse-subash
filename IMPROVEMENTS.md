@@ -2,15 +2,17 @@
 
 This report outlines recommended architectural and operational improvements to simplify the current setup, increase reliability, and enhance the developer experience.
 
+```
+*** THIS ONE IS DONE ***
 ## 1. Unified Data Pipeline
 **Current Issue:** Data is processed in two different ways:
 - The FastAPI backend reads CSVs directly on every request/startup.
 - The `convert-to-json.py` script manually generates static JS batches for the "simple" frontend.
-
 **Improvement:** 
 - **Single Source of Truth:** Move to a lightweight database like **SQLite**. 
 - **Workflow:** The scraper/sync script should populate the SQLite DB. Both the FastAPI backend and any frontend build process should pull from this DB.
 - **Benefit:** Eliminates the need for 140+ `.js` data batches and reduces the memory overhead of pandas loading hundreds of CSVs into a combined DataFrame.
+```
 
 ## 2. Environment & Dependency Management
 **Current Issue:** Global `pip` installations led to `ModuleNotFoundError` and version conflicts. 

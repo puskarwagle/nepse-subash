@@ -9,10 +9,13 @@
   },
   "dependencies": {
     "@sveltejs/kit": "^2.48.4",
+    "driver.js": "^1.4.0",
     "svelte": "^5.43.5",
     "vite": "^7.2.2"
   },
   "devDependencies": {
-    "@sveltejs/adapter-node": "^5.4.0"
+    "@sveltejs/adapter-node": "^5.4.0",
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/vite-plugin-svelte": "^7.0.0"
   }
 }

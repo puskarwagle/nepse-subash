@@ -8,12 +8,13 @@ The project is organized into several modules:
 
 -   `data/`: Contains historical stock data in CSV format (Ignored by Git).
 -   `scripts/`: Utility scripts for data processing.
-    -   `convert-to-json.py`: Converts CSV data into JavaScript batches for the static frontend.
+    -   `export-data-json.py`: Exports database to a static JSON file for the offline dashboard.
+    -   `migrate-csv-to-sqlite.py`: Migrates historical CSV files into the SQLite database.
+    -   `sync-data.py`: Downloads latest historical data directly into SQLite.
 -   `src/`: Main source code.
-    -   `backend/`: FastAPI backend for stock analysis.
+    -   `backend/`: FastAPI backend for stock analysis (optional for static mode).
     -   `scraper/`: Selenium-based scraper for NEPSE today's share price.
-    -   `web-static/`: A lightweight, static HTML/JS frontend that works with pre-processed JSON data.
-    -   `web-svelte/`: A modern SvelteKit-based frontend.
+    -   `web-svelte/`: Modern SvelteKit dashboard with full EMA analysis.
 
 ## Setup & Usage
 
@@ -29,61 +30,55 @@ Install all Python and Node.js dependencies:
 
 ### 2. Syncing Historical Data (Recommended)
 
-Since the EMA calculation requires at least 90 days of history, it is recommended to sync the latest data from the community repository:
+Since the EMA calculation requires historical data, sync from the community repository:
 
 ```bash
 ./run.sh sync
 ```
-This will download the last 120 days of trading data directly into your `data/` folder.
+This populates the SQLite database in `data/nepse.db`.
 
 ### 3. Scraping Data
 
-To fetch the absolute latest data (e.g., today's price):
+To fetch the absolute latest data:
 
 ```bash
 ./run.sh scrape [MM/DD/YYYY]
 ```
-If no date is provided, it defaults to today's date. Data is saved in the `data/` directory.
 
-### 4. Processing Data (for Static Frontend)
+### 4. Processing Data (for Offline Mode)
 
-If you wish to use the lightweight static frontend, process the CSV data:
+To use the dashboard without the FastAPI backend, export the database to a static JSON file:
 
 ```bash
-./run.sh process
+python scripts/export-data-json.py
 ```
-This generates data batches in `src/web-static/` (Ignored by Git).
+The frontend will automatically fall back to this data if the backend is unreachable.
 
 ### 5. Running the Application
 
-To start both the FastAPI backend and the SvelteKit frontend simultaneously:
+To start the SvelteKit frontend in development mode:
 
 ```bash
-./run.sh run
+./run.sh frontend
 ```
--   **Backend**: http://localhost:8000
 -   **Frontend**: http://localhost:5173
 
-### 5. Individual Components
+### 6. Building for Production
 
-You can also run components individually:
--   `./run.sh backend`: Start only the FastAPI server.
--   `./run.sh frontend`: Start only the SvelteKit dev server.
+To generate a zero-dependency static build:
 
-## Git Configuration
-
-A `.gitignore` file is included to keep the repository clean. It ignores:
--   Large CSV data files (`data/*.csv`)
--   Generated JS data batches (`src/web-static/data-batch-*.js`)
--   `node_modules/` and `.svelte-kit/`
--   Python `__pycache__` and virtual environments
+```bash
+cd src/web-svelte && npm run build
+```
+The output will be in `src/web-svelte/build/`.
 
 ## Features
 
--   **Automated Scraping:** Fetches daily floorsheet data from Sharesansar.
--   **EMA Analysis:** Calculates 90-day EMA (High/Low) to determine if a stock is "Above", "Below", or "Within" the EMA range.
--   **Interactive Visualization:** Modern SvelteKit dashboard to track your portfolio against EMA ranges.
--   **Dual Frontend:** Choose between a full-featured SvelteKit app or a zero-dependency static HTML version.
+-   **SQLite Data Pipeline:** Single source of truth for all data, indexed and optimized.
+-   **EMA Analysis:** Calculates 90-day EMA to identify Above/Below/Within trends.
+-   **Modern Dashboard:** SvelteKit-powered UI with tooltips, mobile support, and dark mode.
+-   **Interactive Onboarding:** Built-in tutorial for new users.
+-   **Offline Fallback:** Works even without a running backend using exported JSON data.
 
 ## License
 

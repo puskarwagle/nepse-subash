@@ -8,6 +8,7 @@ DB_PATH = os.path.join(ROOT_DIR, 'data', 'nepse.db')
 def get_db_connection():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -17,7 +18,7 @@ def init_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS daily_prices (
             symbol TEXT,
-            date DATE,
+            date TEXT,
             open REAL,
             high REAL,
             low REAL,
@@ -26,6 +27,7 @@ def init_db():
             PRIMARY KEY (symbol, date)
         )
     """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_symbol_date ON daily_prices(symbol, date)")
     conn.commit()
     conn.close()
 
