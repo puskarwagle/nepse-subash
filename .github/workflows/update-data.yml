@@ -1,0 +1,31 @@
+name: Update NEPSE Data
+
+on:
+  schedule:
+    - cron: '15 11 * * *' # 11:15am UTC => 5:00pm Nepal Time
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Fetch latest data
+        run: bun run fetch-data
+
+      - name: Commit updated data
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'Update NEPSE data'
+          file_pattern: frontend/static/data.json
