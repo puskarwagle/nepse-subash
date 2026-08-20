@@ -1,315 +1,338 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { driver } from 'driver.js';
-	import 'driver.js/dist/driver.css';
-	import { tooltip } from '$lib/actions/tooltip';
-	import { analyzeStock, type EMAResult, type PriceRecord } from '$lib/utils/ema';
+	import { analyzeStock, type PriceRecord, type WMAResult } from '$lib/utils/wma';
 
-	const API_URL = '/api';
+	type Filter = 'all' | 'above' | 'below' | 'within';
+	type SortKey = 'deviation' | 'symbol' | 'price' | 'days';
 
-	let emaPeriod = $state(90);
+	const PERIOD_PRESETS = [20, 50, 90, 200];
+
+	let period = $state(90);
 	let selectedDate = $state('');
-	let selectedStocks = $state<string[]>(['NABIL', 'ADBL', 'UPPER', 'NICA']);
-	let allSymbols = $state<string[]>([]);
-	let analysisResults = $state<EMAResult[]>([]);
-	let loading = $state(false);
-	let lastUpdate = $state('');
-	let offlineMode = $state(false);
-	let fallbackData = $state<{ prices: Record<string, PriceRecord[]> } | null>(null);
+	let rawData = $state<{
+		symbols: string[];
+		prices: Record<string, PriceRecord[]>;
+		last_updated: string;
+	} | null>(null);
+	let results = $state<WMAResult[]>([]);
+	let loading = $state(true);
+	let loadError = $state('');
+	let excluded = $state(0);
+	let filter: Filter = $state('above');
+	let search = $state('');
+	let sortBy = $state<SortKey>('deviation');
+	let theme = $state<'light' | 'dark'>(
+		typeof window !== 'undefined' &&
+			(document.documentElement.getAttribute('data-theme') === 'dark' ||
+				localStorage.getItem('theme') === 'dark')
+			? 'dark'
+			: 'light'
+	);
 
-	async function loadSymbols() {
+	function applyTheme(value: 'light' | 'dark') {
+		document.documentElement.setAttribute('data-theme', value);
 		try {
-			const response = await fetch(`${API_URL}/symbols`);
-			if (!response.ok) throw new Error('Backend unreachable');
-			const data = await response.json();
-			allSymbols = data.symbols;
-			offlineMode = false;
+			localStorage.setItem('theme', value);
 		} catch (error) {
-			console.warn('Backend unreachable, switching to offline mode');
-			await loadFallbackData();
+			console.warn('Could not save theme preference:', error);
 		}
 	}
 
-	async function loadFallbackData() {
-		try {
-			const response = await fetch('/data.json');
-			if (!response.ok) throw new Error('Fallback data not found');
-			const data = await response.json();
-			fallbackData = data;
-			allSymbols = data.symbols;
-			lastUpdate = data.last_updated;
-			offlineMode = true;
-		} catch (error) {
-			console.error('Failed to load fallback data:', error);
-		}
+	function toggleTheme() {
+		theme = theme === 'dark' ? 'light' : 'dark';
+		applyTheme(theme);
 	}
 
-	async function updateAnalysis() {
-		if (selectedStocks.length === 0) {
-			analysisResults = [];
-			return;
-		}
-
-		loading = true;
-
-		try {
-			if (offlineMode && fallbackData) {
-				const results: EMAResult[] = [];
-				for (const symbol of selectedStocks) {
-					const prices = fallbackData.prices[symbol];
-					const analysis = analyzeStock(symbol, prices, emaPeriod);
-					if (analysis) results.push(analysis);
-				}
-				analysisResults = results;
-			} else {
-				const response = await fetch(`${API_URL}/analyze`, {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						symbols: selectedStocks,
-						ema_period: emaPeriod,
-						date: selectedDate || undefined
-					})
-				});
-
-				if (!response.ok) throw new Error('API request failed');
-
-				const data = await response.json();
-				// The API returns EMA results, but we want to add sparkline data which the API might not provide
-				// For now, let's use the API results directly and if we need sparklines we might need to fetch history
-				analysisResults = data.results;
-				if (data.results.length > 0) {
-					lastUpdate = data.results[0].last_updated;
-				}
-			}
-		} catch (error) {
-			console.error('Error analyzing stocks:', error);
-			// If online failed, try offline
-			if (!offlineMode) {
-				await loadFallbackData();
-				await updateAnalysis();
-			}
-		} finally {
-			loading = false;
-		}
-	}
-
-	function startTutorial() {
-		const tutorialDriver = driver({
-			showProgress: true,
-			steps: [
-				{
-					element: '.add-stock',
-					popover: {
-						title: 'Add Stocks',
-						description: 'Start here! Search and add NEPSE stocks to your watchlist.',
-						side: 'top',
-						align: 'start'
-					}
-				},
-				{
-					element: '.ema-control',
-					popover: {
-						title: 'EMA Period',
-						description:
-							'Adjust your trading window. 90 days is standard, but you can tweak it to your strategy.',
-						side: 'bottom',
-						align: 'center'
-					}
-				},
-				{
-					element: '.stock-list',
-					popover: {
-						title: 'Market Status',
-						description:
-							'Instantly see if a stock is breaking out (Above), falling (Below), or consolidating (Within) its moving average.',
-						side: 'top',
-						align: 'center'
-					}
-				}
-			],
-			onCloseClick: () => cleanupTutorial(),
-			onDestroyed: () => cleanupTutorial()
-		});
-
-		// Step 0: Auto-add sample if empty
-		let addedSample = false;
-		if (selectedStocks.length === 0) {
-			selectedStocks = ['NABIL'];
-			addedSample = true;
-		}
-
-		function cleanupTutorial() {
-			if (addedSample) {
-				selectedStocks = selectedStocks.filter((s) => s !== 'NABIL');
-			}
-			localStorage.setItem('nepse_tutorial_seen', 'true');
-		}
-
-		tutorialDriver.drive();
-	}
-
-	function addStock(symbol: string) {
-		if (symbol && !selectedStocks.includes(symbol)) {
-			selectedStocks = [...selectedStocks, symbol];
-		}
-	}
-
-	function removeStock(symbol: string) {
-		selectedStocks = selectedStocks.filter((s) => s !== symbol);
-	}
-
-	function incrementEma() {
-		emaPeriod = Math.min(200, emaPeriod + 1);
-	}
-
-	function decrementEma() {
-		emaPeriod = Math.max(1, emaPeriod - 1);
-	}
+	const lastUpdated = $derived(rawData?.last_updated ?? '');
 
 	$effect(() => {
-		emaPeriod;
+		period;
 		selectedDate;
-		selectedStocks;
-		updateAnalysis();
+		if (!rawData) return;
+		const data = rawData;
+
+		const analyzed: WMAResult[] = [];
+		let skipped = 0;
+		for (const symbol of data.symbols) {
+			let prices = data.prices[symbol];
+			if (selectedDate) prices = prices.filter((p) => p.date <= selectedDate);
+			const r = analyzeStock(symbol, prices, period);
+			if (r) analyzed.push(r);
+			else skipped++;
+		}
+		analyzed.sort((a, b) => b.deviation - a.deviation);
+		results = analyzed;
+		excluded = skipped;
+		loading = false;
 	});
 
-	onMount(() => {
-		loadSymbols().then(() => {
-			if (!localStorage.getItem('nepse_tutorial_seen')) {
-				startTutorial();
-			}
-		});
+	const counts = $derived.by(() => {
+		const c = { above: 0, below: 0, within: 0 };
+		for (const r of results) c[r.status]++;
+		return c;
 	});
+
+	const visible = $derived.by(() => {
+		let list = results;
+		if (filter !== 'all') list = list.filter((r) => r.status === filter);
+		const q = search.trim().toUpperCase();
+		if (q) list = list.filter((r) => r.symbol.includes(q));
+		const sorted = [...list];
+		switch (sortBy) {
+			case 'symbol':
+				sorted.sort((a, b) => a.symbol.localeCompare(b.symbol));
+				break;
+			case 'price':
+				sorted.sort((a, b) => b.current_price - a.current_price);
+				break;
+			case 'days':
+				sorted.sort((a, b) => b.days_in_status - a.days_in_status);
+				break;
+			default:
+				sorted.sort((a, b) => b.deviation - a.deviation);
+		}
+		return sorted;
+	});
+
+	onMount(async () => {
+		try {
+			const response = await fetch('/data.json');
+			if (!response.ok) throw new Error('data.json not found');
+			rawData = await response.json();
+		} catch (error) {
+			loading = false;
+			loadError = 'Failed to load market data. Make sure frontend/static/data.json exists.';
+			console.error(error);
+		}
+	});
+
+	function formatPrice(value: number): string {
+		return '₨' + value.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+	}
 </script>
 
-<div class="app-container">
+<div class="app">
 	<header class="main-header">
-		<div class="logo-area">
-			<h1>📈 NEPSE EMA Scanner</h1>
-			{#if offlineMode}
-				<span class="badge offline">Offline Mode</span>
+		<div class="brand">
+			<h1>📈 NEPSE Scanner</h1>
+			{#if lastUpdated}
+				<span class="updated">Updated {lastUpdated}</span>
 			{/if}
 		</div>
-
 		<div class="header-actions">
-			<button class="help-btn" onclick={startTutorial}>❓ Help</button>
-			<div class="ema-control" use:tooltip={'Adjust the EMA calculation period (days)'}>
-				<button class="ema-btn" onclick={decrementEma}>−</button>
-				<span class="ema-value">{emaPeriod}d EMA</span>
-				<button class="ema-btn" onclick={incrementEma}>+</button>
-			</div>
-			<input type="date" bind:value={selectedDate} class="date-picker" />
+			<input type="date" class="date-picker" bind:value={selectedDate} aria-label="As of date" />
+			<button
+				class="icon-btn"
+				onclick={toggleTheme}
+				aria-label="Toggle light or dark mode"
+				title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+			>
+				{theme === 'dark' ? '☀️' : '🌙'}
+			</button>
 		</div>
 	</header>
 
-	<main class="content">
-		{#if selectedStocks.length === 0}
-			<div class="empty-state">
-				<div class="empty-icon">📊</div>
-				<h2>No stocks in your watchlist</h2>
-				<p>Use the search box below to add stocks and start tracking EMA trends.</p>
-				<div class="arrow-hint">↓</div>
-			</div>
-		{/if}
+	<div class="toolbar">
+		<div class="period-control">
+			<span class="period-label">WMA</span>
+			<button class="step-btn" aria-label="Decrease period" onclick={() => (period = Math.max(5, period - 1))}>
+				−
+			</button>
+			<span class="period-value">{period}d</span>
+			<button class="step-btn" aria-label="Increase period" onclick={() => (period = Math.min(250, period + 1))}>
+				+
+			</button>
+		</div>
+		<div class="presets">
+			{#each PERIOD_PRESETS as preset (preset)}
+				<button
+					class="preset"
+					class:active={period === preset}
+					onclick={() => (period = preset)}
+				>
+					{preset}
+				</button>
+			{/each}
+		</div>
+	</div>
 
-		<div class="stock-list" class:loading>
-			{#each analysisResults as stock (stock.symbol)}
+	{#if loading}
+		<div class="loading">
+			<div class="spinner" aria-hidden="true"></div>
+			<span>Analyzing {period}-day WMA band…</span>
+		</div>
+	{:else if loadError}
+		<div class="error">{loadError}</div>
+	{:else}
+		<div class="stats-tabs" role="tablist">
+			<button
+				class="tab above"
+				class:active={filter === 'above'}
+				role="tab"
+				aria-selected={filter === 'above'}
+				onclick={() => (filter = 'above')}
+			>
+				<span class="dot above"></span>Above <b>{counts.above}</b>
+			</button>
+			<button
+				class="tab within"
+				class:active={filter === 'within'}
+				role="tab"
+				aria-selected={filter === 'within'}
+				onclick={() => (filter = 'within')}
+			>
+				<span class="dot within"></span>Within <b>{counts.within}</b>
+			</button>
+			<button
+				class="tab below"
+				class:active={filter === 'below'}
+				role="tab"
+				aria-selected={filter === 'below'}
+				onclick={() => (filter = 'below')}
+			>
+				<span class="dot below"></span>Below <b>{counts.below}</b>
+			</button>
+			<button
+				class="tab all"
+				class:active={filter === 'all'}
+				role="tab"
+				aria-selected={filter === 'all'}
+				onclick={() => (filter = 'all')}
+			>
+				All <b>{results.length}</b>
+			</button>
+		</div>
+
+		<div class="controls">
+			<input
+				class="search"
+				type="search"
+				placeholder="🔍 Search symbol…"
+				autocomplete="off"
+				spellcheck="false"
+				bind:value={search}
+			/>
+			<select class="sort" bind:value={sortBy} aria-label="Sort stocks">
+				<option value="deviation">Sort: Deviation</option>
+				<option value="symbol">Sort: Symbol</option>
+				<option value="price">Sort: Price</option>
+				<option value="days">Sort: Trend days</option>
+			</select>
+		</div>
+
+		<p class="result-meta">
+			Showing <b>{visible.length}</b> of <b>{results.length}</b> stocks
+			{#if excluded > 0}
+				<span class="muted"> · {excluded} skipped (less than {period} days of history)</span>
+			{/if}
+		</p>
+
+		<div class="stock-list">
+			{#each visible as stock (stock.symbol)}
 				<div class="stock-card {stock.status}">
-					<div class="card-main">
-						<div class="stock-info">
+					<div class="card-top">
+						<div class="symbol-block">
 							<span class="symbol">{stock.symbol}</span>
-							<span class="status-badge {stock.status}">
-								{stock.status.toUpperCase()}
-							</span>
+							<span class="card-date">{stock.last_updated}</span>
 						</div>
-						<div class="price-info">
-							<span class="current-price">₨{stock.current_price}</span>
-							<span
-								class="deviation"
-								class:positive={stock.deviation > 0}
-								class:negative={stock.deviation < 0}
-								use:tooltip={'Percentage deviation from the EMA range midpoint'}
-							>
-								{stock.deviation > 0 ? '+' : ''}{stock.deviation.toFixed(2)}%
-							</span>
-						</div>
+						<span class="status-badge {stock.status}">
+							{stock.status === 'above'
+								? '▲ ABOVE'
+								: stock.status === 'below'
+									? '▼ BELOW'
+									: '◆ WITHIN'}
+						</span>
 					</div>
 
-					<div class="card-details">
-						<div class="ema-range" use:tooltip={'The range between EMA High and EMA Low'}>
-							<span class="label">EMA Range</span>
-							<span class="value">{stock.ema_low.toFixed(1)} — {stock.ema_high.toFixed(1)}</span>
+					<div class="card-mid">
+						<div class="price">{formatPrice(stock.current_price)}</div>
+						<div class="deviation {stock.deviation >= 0 ? 'positive' : 'negative'}">
+							{stock.deviation >= 0 ? '+' : ''}{stock.deviation.toFixed(2)}%
 						</div>
-						<div class="trend-days">
-							<span class="label">Trend Duration</span>
-							<span class="value">{stock.days_in_status} days</span>
-						</div>
-						<button class="remove-btn" onclick={() => removeStock(stock.symbol)} title="Remove">
-							✕
-						</button>
+						<div class="days">{stock.days_in_status}d in trend</div>
 					</div>
 
-					<div class="progress-container" use:tooltip={'Position of price within the EMA channel'}>
-						<div class="progress-bar">
-							<div class="progress-fill" style="width: {stock.range_position}%"></div>
+					<div class="band-row">
+						<span class="band-label">{period}d band</span>
+						<span class="band-value">{formatPrice(stock.wma_low)}</span>
+						<div class="band-bar">
+							<span class="band-fill" style="left: {stock.range_position}%"></span>
 						</div>
+						<span class="band-value">{formatPrice(stock.wma_high)}</span>
 					</div>
 				</div>
 			{/each}
 		</div>
 
-		<div class="add-stock">
-			<select
-				class="stock-select"
-				onchange={(e) => {
-					const target = e.target as HTMLSelectElement;
-					addStock(target.value);
-					target.value = '';
-				}}
-			>
-				<option value="">🔍 Search and add a stock symbol...</option>
-				{#each allSymbols as symbol}
-					{#if !selectedStocks.includes(symbol)}
-						<option value={symbol}>{symbol}</option>
-					{/if}
-				{/each}
-			</select>
-		</div>
-	</main>
+		{#if visible.length === 0}
+			<div class="empty">
+				<div class="empty-icon">🔍</div>
+				<p>No stocks match your search or filter.</p>
+			</div>
+		{/if}
+	{/if}
 
 	<footer class="main-footer">
-		<span>Last updated: {lastUpdate}</span>
-		</footer>
+		<span>WMA {period} · Updated {lastUpdated}</span>
+	</footer>
 </div>
 
 <style>
+	:global(:root) {
+		color-scheme: light;
+		--bg: #f8fafc;
+		--surface: #ffffff;
+		--surface-2: #f1f5f9;
+		--border: #e2e8f0;
+		--border-hover: #cbd5e1;
+		--text: #1e293b;
+		--text-strong: #0f172a;
+		--text-secondary: #475569;
+		--text-muted: #64748b;
+		--text-faint: #94a3b8;
+		--text-barely: #cbd5e1;
+		--up-bg: #e8f5e9;
+		--up-color: #2e7d32;
+		--down-bg: #ffebee;
+		--down-color: #c62828;
+		--within-bg: #fff3e0;
+		--within-color: #ef6c00;
+		--tooltip-bg: #1e293b;
+	}
+
+	:global([data-theme='dark']) {
+		color-scheme: dark;
+		--bg: #0f172a;
+		--surface: #1e293b;
+		--surface-2: #334155;
+		--border: #334155;
+		--border-hover: #475569;
+		--text: #e2e8f0;
+		--text-strong: #f1f5f9;
+		--text-secondary: #cbd5e1;
+		--text-muted: #94a3b8;
+		--text-faint: #64748b;
+		--text-barely: #475569;
+		--up-bg: rgba(46, 125, 50, 0.25);
+		--up-color: #81c784;
+		--down-bg: rgba(198, 40, 40, 0.25);
+		--down-color: #ef9a9a;
+		--within-bg: rgba(239, 108, 0, 0.25);
+		--within-color: #ffb74d;
+		--tooltip-bg: #334155;
+	}
+
 	:global(body) {
 		margin: 0;
 		padding: 0;
 		font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-		background-color: #f8fafc;
-		color: #1e293b;
+		background-color: var(--bg);
+		color: var(--text);
+		-webkit-tap-highlight-color: transparent;
 	}
 
-	:global(.custom-tooltip) {
-		position: fixed;
-		background: #1e293b;
-		color: white;
-		padding: 8px 12px;
-		border-radius: 6px;
-		font-size: 12px;
-		max-width: 200px;
-		z-index: 10000;
-		pointer-events: none;
-		box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-		transition: opacity 0.2s;
-		opacity: 0;
-		line-height: 1.4;
-	}
-
-	.app-container {
-		max-width: 1000px;
+	.app {
+		max-width: 680px;
 		margin: 0 auto;
 		min-height: 100vh;
 		display: flex;
@@ -317,328 +340,495 @@
 	}
 
 	.main-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 24px 20px;
-		background: white;
-		border-bottom: 1px solid #e2e8f0;
 		position: sticky;
 		top: 0;
 		z-index: 100;
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 12px;
+		padding: 16px 16px 12px;
+		background: var(--surface);
+		border-bottom: 1px solid var(--border);
+	}
+
+	.brand {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
 	}
 
 	h1 {
 		margin: 0;
-		font-size: 20px;
+		font-size: 18px;
 		font-weight: 700;
-		color: #0f172a;
+		color: var(--text-strong);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
-	.logo-area {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-	}
-
-	.badge {
-		padding: 4px 8px;
-		border-radius: 4px;
-		font-size: 11px;
-		font-weight: 600;
-	}
-
-	.badge.offline {
-		background: #fef3c7;
-		color: #92400e;
+	.updated {
+		font-size: 12px;
+		color: var(--text-faint);
+		white-space: nowrap;
 	}
 
 	.header-actions {
 		display: flex;
 		align-items: center;
-		gap: 16px;
-	}
-
-	.ema-control {
-		display: flex;
-		align-items: center;
-		background: #f1f5f9;
-		padding: 4px;
-		border-radius: 8px;
-	}
-
-	.ema-btn {
-		width: 32px;
-		height: 32px;
-		border: none;
-		background: white;
-		color: #64748b;
-		border-radius: 6px;
-		cursor: pointer;
-		font-weight: bold;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-	}
-
-	.ema-value {
-		padding: 0 12px;
-		font-size: 14px;
-		font-weight: 600;
-		color: #475569;
-	}
-
-	.date-picker {
-		padding: 8px 12px;
-		border: 1px solid #e2e8f0;
-		border-radius: 8px;
-		font-size: 14px;
-		color: #475569;
-	}
-
-	.help-btn {
-		background: none;
-		border: 1px solid #e2e8f0;
-		padding: 8px 12px;
-		border-radius: 8px;
-		cursor: pointer;
-		font-size: 14px;
-		color: #64748b;
-	}
-
-	.help-btn:hover {
-		background: #f8fafc;
-	}
-
-	.content {
-		padding: 32px 20px;
-		flex: 1;
-	}
-
-	.empty-state {
-		text-align: center;
-		padding: 64px 20px;
-		color: #64748b;
-	}
-
-	.empty-icon {
-		font-size: 48px;
-		margin-bottom: 16px;
-	}
-
-	.arrow-hint {
-		font-size: 32px;
-		margin-top: 24px;
-		animation: bounce 2s infinite;
-	}
-
-	@keyframes bounce {
-		0%,
-		20%,
-		50%,
-		80%,
-		100% {
-			transform: translateY(0);
-		}
-		40% {
-			transform: translateY(-10px);
-		}
-		60% {
-			transform: translateY(-5px);
-		}
-	}
-
-	.stock-list {
-		display: grid;
-		grid-template-columns: 1fr;
-		gap: 16px;
-		margin-bottom: 32px;
-	}
-
-	.stock-card {
-		background: white;
-		border-radius: 12px;
-		padding: 20px;
-		border: 1px solid #e2e8f0;
-		transition: all 0.2s;
-	}
-
-	.stock-card:hover {
-		border-color: #cbd5e1;
-		box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
-	}
-
-	.card-main {
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-start;
-		margin-bottom: 16px;
-	}
-
-	.stock-info {
-		display: flex;
-		flex-direction: column;
 		gap: 8px;
 	}
 
-	.symbol {
+	.icon-btn {
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		padding: 10px 12px;
+		border-radius: 10px;
+		cursor: pointer;
 		font-size: 18px;
+		line-height: 1;
+		color: var(--text-muted);
+		min-height: 44px;
+		min-width: 44px;
+	}
+
+	.icon-btn:hover {
+		background: var(--border-soft, var(--surface));
+		border-color: var(--border-hover);
+	}
+
+	.date-picker {
+		padding: 9px 10px;
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		font-size: 13px;
+		color: var(--text-secondary);
+		background: var(--surface);
+		min-height: 44px;
+		max-width: 150px;
+	}
+
+	.toolbar {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		padding: 12px 16px;
+		background: var(--surface);
+		border-bottom: 1px solid var(--border);
+	}
+
+	.period-control {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		background: var(--surface-2);
+		padding: 4px;
+		border-radius: 10px;
+		flex-shrink: 0;
+	}
+
+	.period-label {
+		font-size: 11px;
 		font-weight: 700;
-		color: #0f172a;
+		color: var(--text-faint);
+		padding: 0 6px;
+		letter-spacing: 0.04em;
+	}
+
+	.step-btn {
+		width: 36px;
+		height: 36px;
+		border: none;
+		background: var(--surface);
+		color: var(--text-muted);
+		border-radius: 8px;
+		cursor: pointer;
+		font-weight: 700;
+		font-size: 16px;
+		box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+	}
+
+	.step-btn:hover {
+		background: var(--border-hover);
+	}
+
+	.period-value {
+		padding: 0 8px;
+		font-size: 14px;
+		font-weight: 700;
+		color: var(--text-strong);
+		min-width: 34px;
+		text-align: center;
+	}
+
+	.presets {
+		display: flex;
+		gap: 6px;
+		flex: 1;
+		min-width: 0;
+	}
+
+	.preset {
+		flex: 1;
+		background: var(--surface-2);
+		border: 1px solid transparent;
+		padding: 8px 4px;
+		border-radius: 8px;
+		cursor: pointer;
+		font-size: 13px;
+		font-weight: 600;
+		color: var(--text-muted);
+		min-height: 40px;
+	}
+
+	.preset.active {
+		background: var(--text-strong);
+		color: var(--surface);
+		border-color: var(--text-strong);
+	}
+
+	.stats-tabs {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 8px;
+		padding: 14px 16px 0;
+	}
+
+	.tab {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 4px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 12px;
+		padding: 10px 4px;
+		cursor: pointer;
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--text-secondary);
+		min-height: 56px;
+	}
+
+	.tab b {
+		font-size: 16px;
+		color: var(--text-strong);
+	}
+
+	.tab.active {
+		border-color: var(--text-strong);
+		box-shadow: 0 0 0 1px var(--text-strong);
+	}
+
+	.tab.active.above {
+		border-color: var(--up-color);
+		box-shadow: 0 0 0 1px var(--up-color);
+	}
+
+	.tab.active.within {
+		border-color: var(--within-color);
+		box-shadow: 0 0 0 1px var(--within-color);
+	}
+
+	.tab.active.below {
+		border-color: var(--down-color);
+		box-shadow: 0 0 0 1px var(--down-color);
+	}
+
+	.dot {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+
+	.dot.above {
+		background: var(--up-color);
+	}
+
+	.dot.within {
+		background: var(--within-color);
+	}
+
+	.dot.below {
+		background: var(--down-color);
+	}
+
+	.controls {
+		display: flex;
+		gap: 8px;
+		padding: 14px 16px 8px;
+	}
+
+	.search {
+		flex: 1;
+		min-width: 0;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		padding: 11px 12px;
+		font-size: 14px;
+		color: var(--text);
+		min-height: 44px;
+	}
+
+	.search:focus {
+		outline: 2px solid var(--text-faint);
+		outline-offset: 1px;
+	}
+
+	.sort {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		padding: 11px 8px;
+		font-size: 13px;
+		color: var(--text-secondary);
+		min-height: 44px;
+		max-width: 150px;
+	}
+
+	.result-meta {
+		margin: 0;
+		padding: 4px 16px 12px;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+
+	.result-meta .muted {
+		color: var(--text-faint);
+	}
+
+	.stock-list {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		padding: 0 16px 24px;
+	}
+
+	.stock-card {
+		background: var(--surface);
+		border-radius: 14px;
+		padding: 14px;
+		border: 1px solid var(--border);
+	}
+
+	.stock-card.above {
+		border-left: 4px solid var(--up-color);
+	}
+
+	.stock-card.below {
+		border-left: 4px solid var(--down-color);
+	}
+
+	.stock-card.within {
+		border-left: 4px solid var(--within-color);
+	}
+
+	.card-top {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 10px;
+	}
+
+	.symbol-block {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+	}
+
+	.symbol {
+		font-size: 17px;
+		font-weight: 800;
+		color: var(--text-strong);
+		letter-spacing: 0.02em;
+	}
+
+	.card-date {
+		font-size: 11px;
+		color: var(--text-faint);
 	}
 
 	.status-badge {
-		padding: 4px 8px;
-		border-radius: 6px;
+		padding: 5px 10px;
+		border-radius: 8px;
 		font-size: 11px;
-		font-weight: 700;
-		width: fit-content;
+		font-weight: 800;
+		letter-spacing: 0.03em;
+		white-space: nowrap;
 	}
 
 	.status-badge.above {
-		background: #e8f5e9;
-		color: #2e7d32;
+		background: var(--up-bg);
+		color: var(--up-color);
 	}
+
 	.status-badge.below {
-		background: #ffebee;
-		color: #c62828;
+		background: var(--down-bg);
+		color: var(--down-color);
 	}
+
 	.status-badge.within {
-		background: #fff3e0;
-		color: #ef6c00;
+		background: var(--within-bg);
+		color: var(--within-color);
 	}
 
-	.price-info {
-		text-align: right;
+	.card-mid {
 		display: flex;
-		flex-direction: column;
-		gap: 4px;
+		align-items: baseline;
+		gap: 10px;
+		margin-top: 10px;
 	}
 
-	.current-price {
-		font-size: 20px;
-		font-weight: 700;
-		color: #0f172a;
+	.price {
+		font-size: 22px;
+		font-weight: 800;
+		color: var(--text-strong);
 	}
 
 	.deviation {
-		font-size: 13px;
-		font-weight: 600;
+		font-size: 14px;
+		font-weight: 700;
 	}
 
 	.deviation.positive {
-		color: #2e7d32;
+		color: var(--up-color);
 	}
+
 	.deviation.negative {
-		color: #c62828;
+		color: var(--down-color);
 	}
 
-	.card-details {
-		display: grid;
-		grid-template-columns: 1fr 1fr auto;
-		gap: 24px;
-		padding: 16px 0;
-		border-top: 1px solid #f1f5f9;
-		align-items: center;
-	}
-
-	.label {
-		display: block;
-		font-size: 11px;
-		text-transform: uppercase;
-		color: #94a3b8;
-		letter-spacing: 0.05em;
-		margin-bottom: 4px;
-	}
-
-	.value {
-		font-size: 14px;
+	.days {
+		margin-left: auto;
+		font-size: 12px;
+		color: var(--text-muted);
 		font-weight: 600;
-		color: #475569;
+		white-space: nowrap;
 	}
 
-	.remove-btn {
-		background: none;
-		border: none;
-		color: #cbd5e1;
-		cursor: pointer;
-		padding: 8px;
-		font-size: 16px;
-		transition: color 0.2s;
+	.band-row {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin-top: 12px;
 	}
 
-	.remove-btn:hover {
-		color: #ef4444;
+	.band-label {
+		font-size: 10px;
+		text-transform: uppercase;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		color: var(--text-faint);
+		white-space: nowrap;
 	}
 
-	.progress-container {
-		margin-top: 8px;
+	.band-value {
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--text-secondary);
+		white-space: nowrap;
 	}
 
-	.progress-bar {
-		height: 6px;
-		background: #f1f5f9;
-		border-radius: 3px;
-		overflow: hidden;
+	.band-bar {
+		flex: 1;
+		height: 8px;
+		background: linear-gradient(90deg, var(--down-color) 0%, var(--surface-2) 30%, var(--surface-2) 70%, var(--up-color) 100%);
+		opacity: 0.35;
+		border-radius: 4px;
+		position: relative;
 	}
 
-	.progress-fill {
-		height: 100%;
-		background: #94a3b8;
-		border-radius: 3px;
-		transition: width 0.3s ease;
+	.band-fill {
+		position: absolute;
+		top: -3px;
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: var(--text-strong);
+		border: 2px solid var(--surface);
+		transform: translateX(-50%);
+		box-shadow: 0 1px 3px rgb(0 0 0 / 0.3);
 	}
 
-	.stock-card.above .progress-fill {
-		background: #2e7d32;
-	}
-	.stock-card.below .progress-fill {
-		background: #c62828;
-	}
-	.stock-card.within .progress-fill {
-		background: #ef6c00;
+	.stock-card.above .band-fill {
+		background: var(--up-color);
 	}
 
-	.add-stock {
-		background: white;
-		border: 2px dashed #e2e8f0;
-		border-radius: 12px;
-		padding: 12px;
+	.stock-card.below .band-fill {
+		background: var(--down-color);
 	}
 
-	.stock-select {
-		width: 100%;
-		border: none;
-		padding: 12px;
-		font-size: 15px;
-		background: transparent;
-		color: #475569;
-		cursor: pointer;
-		outline: none;
+	.stock-card.within .band-fill {
+		background: var(--within-color);
+	}
+
+	.loading {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 16px;
+		padding: 72px 20px;
+		color: var(--text-muted);
+		font-size: 14px;
+	}
+
+	.spinner {
+		width: 36px;
+		height: 36px;
+		border: 3px solid var(--border);
+		border-top-color: var(--text-strong);
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	.error {
+		padding: 48px 20px;
+		text-align: center;
+		color: var(--down-color);
+		font-weight: 600;
+	}
+
+	.empty {
+		padding: 48px 20px;
+		text-align: center;
+		color: var(--text-muted);
+	}
+
+	.empty-icon {
+		font-size: 40px;
+		margin-bottom: 8px;
 	}
 
 	.main-footer {
-		padding: 24px 20px;
-		border-top: 1px solid #e2e8f0;
+		padding: 20px 16px;
+		border-top: 1px solid var(--border);
 		display: flex;
-		justify-content: flex-end;
-		font-size: 13px;
-		color: #94a3b8;
+		justify-content: center;
+		font-size: 12px;
+		color: var(--text-faint);
 	}
 
-	@media (max-width: 640px) {
-		.header-actions {
-			gap: 8px;
+	@media (min-width: 700px) {
+		.app {
+			max-width: 820px;
 		}
-		.ema-value {
-			display: none;
-		}
-		.card-details {
-			grid-template-columns: 1fr;
+
+		.stock-list {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
 			gap: 12px;
-		}
-		.remove-btn {
-			grid-row: 1;
-			grid-column: 1;
-			justify-self: end;
 		}
 	}
 </style>
