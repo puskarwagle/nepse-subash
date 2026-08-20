@@ -8,7 +8,7 @@
 	const API_URL = '/api';
 
 	let emaPeriod = $state(90);
-	let selectedDate = $state('2024-12-31');
+	let selectedDate = $state('');
 	let selectedStocks = $state<string[]>(['NABIL', 'ADBL', 'UPPER', 'NICA']);
 	let allSymbols = $state<string[]>([]);
 	let analysisResults = $state<EMAResult[]>([]);
@@ -68,7 +68,7 @@
 					body: JSON.stringify({
 						symbols: selectedStocks,
 						ema_period: emaPeriod,
-						date: selectedDate
+						date: selectedDate || undefined
 					})
 				});
 
@@ -280,10 +280,7 @@
 
 	<footer class="main-footer">
 		<span>Last updated: {lastUpdate}</span>
-		<div class="footer-links">
-			<a href="https://github.com/sbmagar13/nepse-ema-scanner" target="_blank">GitHub</a>
-		</div>
-	</footer>
+		</footer>
 </div>
 
 <style>
@@ -622,18 +619,9 @@
 		padding: 24px 20px;
 		border-top: 1px solid #e2e8f0;
 		display: flex;
-		justify-content: space-between;
+		justify-content: flex-end;
 		font-size: 13px;
 		color: #94a3b8;
-	}
-
-	.footer-links a {
-		color: #64748b;
-		text-decoration: none;
-	}
-
-	.footer-links a:hover {
-		text-decoration: underline;
 	}
 
 	@media (max-width: 640px) {
