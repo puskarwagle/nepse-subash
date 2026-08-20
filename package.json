@@ -1,0 +1,13 @@
+{
+  "name": "nepse-ema-scanner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fetch-data": "bun scripts/fetch-data.ts",
+    "scrape-today": "bun scripts/scrape-today.ts"
+  },
+  "devDependencies": {
+    "playwright": "^1.54.1"
+  }
+}
