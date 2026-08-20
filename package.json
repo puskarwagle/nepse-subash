@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "fetch-data": "bun scripts/fetch-data.ts",
-    "scrape-today": "bun scripts/scrape-today.ts"
+    "fetch-data": "node scripts/fetch-data.ts",
+    "scrape-today": "node scripts/scrape-today.ts"
   },
   "devDependencies": {
     "playwright": "^1.54.1"

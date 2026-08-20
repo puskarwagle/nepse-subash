@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export interface PriceRecord {
     date: string;
@@ -20,7 +21,7 @@ export interface DataFile {
     last_updated: string;
 }
 
-const DATA_FILE = join(import.meta.dir, '..', 'frontend', 'static', 'data.json');
+const DATA_FILE = join(dirname(fileURLToPath(import.meta.url)), '..', 'frontend', 'static', 'data.json');
 
 const NUMERIC_COLUMNS = ['Open', 'High', 'Low', 'Close'];
 const VOLUME_COLUMNS = ['Vol.', 'Vol', 'Volume'];
