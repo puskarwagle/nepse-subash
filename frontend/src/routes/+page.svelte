@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { PUBLIC_REFRESH_TOKEN } from '$env/static/public';
+	import { env as publicEnv } from '$env/dynamic/public';
 	import { analyzeStock, type PriceRecord, type WMAResult } from '$lib/utils/wma';
 
 	type Filter = 'all' | 'above' | 'below' | 'within';
@@ -54,7 +54,7 @@
 		try {
 			const response = await fetch('/api/refresh', {
 				method: 'POST',
-				headers: { 'X-Refresh-Token': PUBLIC_REFRESH_TOKEN }
+				headers: { 'X-Refresh-Token': publicEnv.PUBLIC_REFRESH_TOKEN }
 			});
 			const body = await response.json();
 			if (!response.ok) throw new Error(body?.error ?? `Refresh failed (${response.status})`);
@@ -154,7 +154,7 @@
 			<button
 				class="icon-btn refresh-btn"
 				onclick={refreshData}
-				disabled={refreshing || !PUBLIC_REFRESH_TOKEN}
+				disabled={refreshing || !publicEnv.PUBLIC_REFRESH_TOKEN}
 				aria-label="Refresh market data"
 				title="Refresh market data from sharesansar.com"
 			>
