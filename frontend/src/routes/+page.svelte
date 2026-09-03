@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { env as publicEnv } from '$env/dynamic/public';
+	import CandleChart from '$lib/components/CandleChart.svelte';
 	import { analyzeStock, type PriceRecord, type WMAResult } from '$lib/utils/wma';
 
 	type Filter = 'all' | 'above' | 'below' | 'within';
@@ -10,6 +11,7 @@
 
 	let period = $state(90);
 	let selectedDate = $state('');
+	let selectedSymbol = $state<string | null>(null);
 	let rawData = $state<{
 		symbols: string[];
 		prices: Record<string, PriceRecord[]>;
@@ -135,6 +137,15 @@
 
 	function formatPrice(value: number): string {
 		return '₨' + value.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+	}
+
+	function getSymbolPrices(symbol: string): PriceRecord[] {
+		if (!rawData) return [];
+		return rawData.prices[symbol] ?? [];
+	}
+
+	function toggleChart(symbol: string) {
+		selectedSymbol = selectedSymbol === symbol ? null : symbol;
 	}
 </script>
 
@@ -299,6 +310,23 @@
 						</div>
 						<span class="band-value">{formatPrice(stock.wma_high)}</span>
 					</div>
+
+					<div class="card-actions">
+						<button
+							class="chart-toggle"
+							aria-expanded={selectedSymbol === stock.symbol}
+							onclick={() => toggleChart(stock.symbol)}
+						>
+							{selectedSymbol === stock.symbol ? '˄ Hide chart' : '˅ Show chart'}
+						</button>
+						<a class="fullscreen-link" href="/chart/{stock.symbol}">⛶ Full screen</a>
+					</div>
+
+					{#if selectedSymbol === stock.symbol}
+						<div class="detail-chart">
+							<CandleChart symbol={stock.symbol} prices={getSymbolPrices(stock.symbol)} {theme} height={320} />
+						</div>
+					{/if}
 				</div>
 			{/each}
 		</div>
@@ -814,6 +842,50 @@
 
 	.stock-card.within .band-fill {
 		background: var(--within-color);
+	}
+
+	.card-actions {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		margin-top: 12px;
+	}
+
+	.chart-toggle {
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		padding: 8px 14px;
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--text-secondary);
+		cursor: pointer;
+		min-height: 40px;
+		flex: 1;
+	}
+	.chart-toggle:hover { border-color: var(--border-hover); }
+
+	.fullscreen-link {
+		background: var(--surface-2);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		padding: 8px 14px;
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--text-secondary);
+		text-decoration: none;
+		min-height: 40px;
+		display: inline-flex;
+		align-items: center;
+		white-space: nowrap;
+	}
+	.fullscreen-link:hover { border-color: var(--border-hover); }
+
+	.detail-chart {
+		margin-top: 12px;
+		border-top: 1px solid var(--border);
+		padding-top: 14px;
 	}
 
 	.loading {
