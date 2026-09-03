@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { PUBLIC_REFRESH_TOKEN } from '$env/static/public';
 	import { analyzeStock, type PriceRecord, type WMAResult } from '$lib/utils/wma';
 
 	type Filter = 'all' | 'above' | 'below' | 'within';
@@ -41,6 +42,32 @@
 	function toggleTheme() {
 		theme = theme === 'dark' ? 'light' : 'dark';
 		applyTheme(theme);
+	}
+
+	let refreshing = $state(false);
+	let refreshMessage = $state('');
+
+	async function refreshData() {
+		if (refreshing) return;
+		refreshing = true;
+		refreshMessage = '';
+		try {
+			const response = await fetch('/api/refresh', {
+				method: 'POST',
+				headers: { 'X-Refresh-Token': PUBLIC_REFRESH_TOKEN }
+			});
+			const body = await response.json();
+			if (!response.ok) throw new Error(body?.error ?? `Refresh failed (${response.status})`);
+			const dataResponse = await fetch('/data.json');
+			if (!dataResponse.ok) throw new Error('data.json not found after refresh');
+			rawData = await dataResponse.json();
+			refreshMessage = `Refreshed ${body.source === 'mirror' ? 'from mirror' : ''} · data through ${body.last_updated}`;
+		} catch (error) {
+			refreshMessage = (error as Error).message;
+			console.error(error);
+		} finally {
+			refreshing = false;
+		}
 	}
 
 	const lastUpdated = $derived(rawData?.last_updated ?? '');
@@ -118,9 +145,21 @@
 			{#if lastUpdated}
 				<span class="updated">Updated {lastUpdated}</span>
 			{/if}
+			{#if refreshMessage}
+				<span class="updated refresh-msg">{refreshMessage}</span>
+			{/if}
 		</div>
 		<div class="header-actions">
 			<input type="date" class="date-picker" bind:value={selectedDate} aria-label="As of date" />
+			<button
+				class="icon-btn refresh-btn"
+				onclick={refreshData}
+				disabled={refreshing || !PUBLIC_REFRESH_TOKEN}
+				aria-label="Refresh market data"
+				title="Refresh market data from sharesansar.com"
+			>
+				{refreshing ? '⏳' : '🔄'}
+			</button>
 			<button
 				class="icon-btn"
 				onclick={toggleTheme}
@@ -397,6 +436,15 @@
 	.icon-btn:hover {
 		background: var(--border-soft, var(--surface));
 		border-color: var(--border-hover);
+	}
+
+	.icon-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.refresh-msg {
+		color: var(--text-muted);
 	}
 
 	.date-picker {
