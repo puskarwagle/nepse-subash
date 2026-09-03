@@ -24,7 +24,16 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Fetch latest data
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Scrape today's NEPSE data (primary)
+        id: scrape
+        continue-on-error: true
+        run: npm run scrape-today
+
+      - name: Backfill from mirror repo (backup)
+        if: always() && steps.scrape.outcome != 'success'
         run: npm run fetch-data
 
       - name: Commit updated data
